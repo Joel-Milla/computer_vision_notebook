@@ -1,4 +1,6 @@
 #include <Eigen/Dense>
+#include <Eigen/src/Core/Matrix.h>
+#include <algorithm>
 #include <iostream>
 #include <opencv2/core.hpp>
 #include <opencv2/core/base.hpp>
@@ -9,6 +11,9 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
+#include <string>
+#include <utility>
+#include <vector>
 
 std::string manual_parsing(int argc, char **argv) {
   std::string image_path;
@@ -26,17 +31,63 @@ std::string manual_parsing(int argc, char **argv) {
   return image_path;
 }
 
-cv::Mat convolution(cv::Mat image, cv::Mat kernel) {
-  //* Convert to eigen kernel
-  Eigen::MatrixXf eigen_kernel;
-  cv::cv2eigen(kernel, eigen_kernel);
+std::vector<std::pair<std::string, Eigen::MatrixXf>> get_kernelBank() {
+  Eigen::MatrixXf smallBlur = Eigen::MatrixXf::Constant(7, 7, 1.0f / 49.0f);
+  Eigen::MatrixXf bigBlur =
+      Eigen::MatrixXf::Constant(21, 21, 1.0f / (21.0f * 21.0f));
 
+  // Sharpening kernel - enhances edges and details
+  Eigen::MatrixXf sharpen(3,3);
+  sharpen << 0, -1, 0, -1, 5, -1, 0, -1, 0;
+  /* Matrix
+  [ 0 -1  0]
+  [-1  5 -1]
+  [ 0 -1  0]
+  */
+
+  // Laplacian kernel - detects edge-like regions
+  Eigen::MatrixXf laplacian(3,3);
+  laplacian << 0, 1, 0, 1, -4, 1, 0, 1, 0;
+  /* Matrix
+  [ 0  1  0]
+  [ 1 -4  1]
+  [ 0  1  0]
+  */
+
+  // Sobel x-axis kernel - detects vertical edges
+  Eigen::MatrixXf sobelX(3,3);
+  sobelX << -1, 0, 1, -2, 0, 2, -1, 0, 1;
+  /* Matrix:
+  [-1  0  1]
+  [-2  0  2]
+  [-1  0  1]
+  */
+
+  // Sobel y-axis kernel - detects horizontal edges
+  Eigen::MatrixXf sobelY(3,3);
+  sobelY << -1, -2, -1, 0, 0, 0, 1, 2, 1;
+  /* Matrix
+  [-1 -2 -1]
+  [ 0  0  0]
+  [ 1  2  1]
+  */
+
+  std::vector<std::pair<std::string, Eigen::MatrixXf>> kernelBank{
+      {"small_blur", smallBlur}, {"large_blur", bigBlur}, {"sharpen", sharpen},
+      {"laplacian", laplacian},  {"sobel_x", sobelX},     {"sobel_y", sobelY},
+  };
+
+  return kernelBank;
+}
+
+cv::Mat convolution(cv::Mat image, Eigen::MatrixXf eigen_kernel) {
   //* Height/width of image/kernel
   int iH = image.rows;
   int iW = image.cols;
 
-  int kH = kernel.rows;
-  int kW = kernel.cols;
+  int kH = eigen_kernel.rows();
+  int kW = eigen_kernel.cols();
+  
 
   int pad = (kW - 1) / 2;
   cv::copyMakeBorder(image, image, pad, pad, pad, pad, cv::BORDER_REPLICATE);
@@ -54,23 +105,28 @@ cv::Mat convolution(cv::Mat image, cv::Mat kernel) {
   */
   for (int y = pad; y < (iH + pad); y++) {
     for (int x = pad; x < (iW + pad); x++) {
+      // std::cout << image.size << std::endl;
+      // std::cout << eigen_kernel.size() << std::endl;
+      // std::cout << y << " " << y+kH << std::endl;
+      // std::cout << x << " " << x+kW << std::endl;
+      //* (x,y) is the current center. Need to get the range from previous pixels and next pixels (remembering rhs is exclusive)
       cv::Mat slice =
-          image(cv::Range(y, y + kernel.rows), cv::Range(x, x + kernel.cols));
+          image(cv::Range(y - pad, y + pad + 1), cv::Range(x - pad, x + pad + 1));
+
       Eigen::MatrixXf eigen_slice;
       cv::cv2eigen(slice, eigen_slice);
 
       Eigen::MatrixXf result = eigen_kernel.cwiseProduct(eigen_slice);
       float sum = result.sum();
-
-      eigen_output(y, x) = sum;
+      //* The result of the sum can be sum<0 or sum>255. So we clip so that the range is between [0, 255]
+      sum = std::max(0.0f, std::min(255.0f, sum));
+      eigen_output(y - pad, x - pad) = sum;
     }
   }
 
   //* Convert eigen values to output matrix
   cv::eigen2cv(eigen_output, output);
-
-  //* Normalize to [0, 255]
-  cv::normalize(output, output, 0, 255, cv::NORM_MINMAX, CV_8UC1);
+  output.convertTo(output, CV_8UC1); //* convert to unsigned integers
 
   return output;
 }
@@ -84,46 +140,25 @@ complex
 */
 void kernels(const std::string &image_path) {
   cv::Mat img = cv::imread(image_path);
+  std::vector<std::pair<std::string, Eigen::MatrixXf>> kernelBank = get_kernelBank();
+  
+  cv::Mat gray;
+  cv::cvtColor(img, gray, cv::COLOR_BGR2GRAY);
 
-  Eigen::MatrixXf smallBlur = Eigen::MatrixXf::Constant(7, 7, 1.0f / 49.0f);
-  Eigen::MatrixXf bibBlur =
-      Eigen::MatrixXf::Constant(21, 21, 1.0f / (21.0f * 21.0f));
+  for (const auto& [name, kernel] : kernelBank) {
+    cv::Mat kernel_cv;
+    cv::eigen2cv(kernel, kernel_cv);
 
-  // Sharpening kernel - enhances edges and details
-  Eigen::Matrix3i sharpen;
-  sharpen << 0, -1, 0, -1, 5, -1, 0, -1, 0;
-  /* Matrix
-  [ 0 -1  0]
-  [-1  5 -1]
-  [ 0 -1  0]
-  */
+    cv::Mat convolve_output = convolution(gray, kernel);
+    cv::Mat opencv_output;
+    cv::filter2D(gray, opencv_output, -1, kernel_cv); //* -1 tells opencv to automatically calculate depth of image
 
-  // Laplacian kernel - detects edge-like regions
-  Eigen::Matrix3i laplacian;
-  laplacian << 0, 1, 0, 1, -4, 1, 0, 1, 0;
-  /* Matrix
-  [ 0  1  0]
-  [ 1 -4  1]
-  [ 0  1  0]
-  */
-
-  // Sobel x-axis kernel - detects vertical edges
-  Eigen::Matrix3i sobelX;
-  sobelX << -1, 0, 1, -2, 0, 2, -1, 0, 1;
-  /* Matrix:
-  [-1  0  1]
-  [-2  0  2]
-  [-1  0  1]
-  */
-
-  // Sobel y-axis kernel - detects horizontal edges
-  Eigen::Matrix3i sobelY;
-  sobelY << -1, -2, -1, 0, 0, 0, 1, 2, 1;
-  /* Matrix
-  [-1 -2 -1]
-  [ 0  0  0]
-  [ 1  2  1]
-  */
+    cv::imshow("original", gray);
+    cv::imshow(name, convolve_output);
+    cv::imshow("opencv", opencv_output);
+    cv::waitKey();
+    cv::destroyAllWindows();
+  }
 }
 
 int main(int argc, char **argv) {
