@@ -2,4 +2,5 @@ build/**
 **/build/**
 .cache/**
 **/.cache/**
-.idea/**
+**/.idea/**
+**/__pycache__/**
