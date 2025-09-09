@@ -64,7 +64,8 @@ for epoch in range(0, EPOCHS):
         predictions = mlp(batchX) # make the prediction
         loss = lossFunc(predictions, batchY.long()) # compare our predictions with ground truth, its loss
 
-        opt.zero_grad()
+        opt.zero_grad() # zero all the attributes '.grad' to zero
+        # backward() updates '.grad' of mlp that shows the gradients of the model
         loss.backward() # doing backprop, it will accumulate gradients at each step. If you do not...
         # zero the gradients done previously, these will start to accumulate
         opt.step() # update model parameters. Take step towards the optimal face
