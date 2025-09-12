@@ -64,11 +64,6 @@ cv::Ptr<cv::aruco::Dictionary> get_dictionary(const std::string &type) {
 }
 
 void detect_aruco_image(cv::Mat &image, const cv::Ptr<cv::aruco::Dictionary> &dict) {
-    //* Resize for better view
-    int new_height = (600 * image.rows) / image.cols;
-    cv::Size new_size(600, new_height);
-    cv::resize(image, image, new_size);
-
     cv::Ptr<cv::aruco::DetectorParameters> arucoParams = cv::makePtr<cv::aruco::DetectorParameters>();
 
     std::vector<std::vector<cv::Point2f>> corners, rejectedCandidates;
@@ -141,6 +136,10 @@ void detect_aruco_video(const std::string &video_path,
   cv::Ptr<cv::aruco::Dictionary> dict = get_dictionary(type);
   for (;;) {
     cap.read(frame);
+    //* Resize for better view
+    int new_height = (600 * frame.rows) / frame.cols;
+    cv::Size new_size(600, new_height);
+    cv::resize(frame, frame, new_size);
 
     //* check if we succeed
     if (frame.empty()) {
