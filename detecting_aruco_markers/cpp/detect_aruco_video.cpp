@@ -136,16 +136,17 @@ void detect_aruco_video(const std::string &video_path,
   cv::Ptr<cv::aruco::Dictionary> dict = get_dictionary(type);
   for (;;) {
     cap.read(frame);
-    //* Resize for better view
-    int new_height = (600 * frame.rows) / frame.cols;
-    cv::Size new_size(600, new_height);
-    cv::resize(frame, frame, new_size);
 
     //* check if we succeed
     if (frame.empty()) {
       std::cerr << "[ERROR] Frame not detected";
       break;
     }
+
+    //* Resize for better view
+    int new_height = (600 * frame.rows) / frame.cols;
+    cv::Size new_size(600, new_height);
+    cv::resize(frame, frame, new_size);
 
     //* Obtain the arUCo detection
     detect_aruco_image(frame, dict);

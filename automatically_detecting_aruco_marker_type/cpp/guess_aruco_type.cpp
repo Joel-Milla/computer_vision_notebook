@@ -44,6 +44,7 @@ void detect_aruco_dictionary_matches(const cv::Mat &image) {
                                                     //detect arUCo markers
   cv::Ptr<cv::aruco::Dictionary> dict;
 
+
   for (const auto [name_dict, type] : dict_map) {
 
     std::vector<std::vector<cv::Point2f>> corners, rejectedCandidates;
