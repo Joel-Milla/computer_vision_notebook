@@ -21,3 +21,6 @@ FetchContent_MakeAvailable(cli11_proj)
 # Executables
 add_executable (detect_aruco_image detect_aruco_image.cpp)
 target_link_libraries (detect_aruco_image ${OpenCV_LIBS} CLI11::CLI11)
+
+add_executable (detect_aruco_video detect_aruco_video.cpp)
+target_link_libraries (detect_aruco_video ${OpenCV_LIBS} CLI11::CLI11)
